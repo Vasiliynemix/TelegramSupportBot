@@ -217,7 +217,10 @@ def get_additional_message(message, req_id, status, agent_id, is_user=False):
 
     else:
         if additional_message != 'None':
-            core.add_message(req_id, additional_message, status)
+            if is_user == False:
+                core.add_message(req_id, additional_message, status)
+            else:
+                core.add_message(req_id, additional_message, "user")
 
         if check_file != None:
             if additional_message != 'None':
