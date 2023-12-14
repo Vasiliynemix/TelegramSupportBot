@@ -220,6 +220,19 @@ def get_user_id_of_req(req_id):
     return user_id
 
 
+def check_req_by_user_id(user_id):
+    con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])
+    cur = con.cursor()
+
+    cur.execute(f"SELECT `user_id` FROM requests WHERE `user_id` = '{user_id}'")
+    user_id = cur.fetchone()[0]
+
+    cur.close()
+    con.close()
+
+    return user_id
+
+
 #Получить file_id из id записи в БД
 def get_file_id(id):
     con = pymysql.connect(host=config.MySQL[0], user=config.MySQL[1], passwd=config.MySQL[2], db=config.MySQL[3])

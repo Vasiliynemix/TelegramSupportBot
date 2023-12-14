@@ -1,7 +1,6 @@
 from telebot import types
 from core import my_reqs, get_reqs, get_agents, get_passwords, get_files, get_icon_from_status, get_file_text, check_agent_status
 
-
 def page(markup, number, list, call, callback_cancel):
     if len(list) != 10:
         max_nums = number
@@ -33,13 +32,13 @@ def page(markup, number, list, call, callback_cancel):
 
 def markup_main(user_id):
     markup_main = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    item1 = types.KeyboardButton("✏️ Написать запрос")
+    item2 = types.KeyboardButton("✉️ Мои запросы")
     if check_agent_status(user_id) == True:
         item3 = types.KeyboardButton("🕵 Агент")
         markup_main.row(item3)
-    item1 = types.KeyboardButton("✏️ Написать запрос")
-    item2 = types.KeyboardButton("✉️ Мои запросы")
-    markup_main.row(item1)
-    markup_main.row(item2)
+        markup_main.row(item1)
+        markup_main.row(item2)
 
     return markup_main
 
@@ -135,7 +134,7 @@ def markup_request_action(req_id, req_status, callback):
         item1 = types.InlineKeyboardButton("✏️ Добавить сообщение", callback_data=f'add_message:{req_id}:{status_user}')
         item2 = types.InlineKeyboardButton("🗂 Показать файлы", callback_data=f'req_files:{req_id}:{callback}:1')
 
-        if status_user == 'user':
+        if status_user == 'agent':
             item3 = types.InlineKeyboardButton("✅ Завершить запрос", callback_data=f'confirm_req:wait:{req_id}')
 
         item4 = types.InlineKeyboardButton("Назад", callback_data=formatted_callback)
@@ -143,7 +142,7 @@ def markup_request_action(req_id, req_status, callback):
         if status_user == 'user':
             markup_request_action.add(item1, item2, item3, item4)
         else:
-            markup_request_action.add(item1, item2, item4)
+            markup_request_action.add(item1, item2, item3, item4)
 
     return markup_request_action
 

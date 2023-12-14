@@ -8,6 +8,7 @@ import sys
 import time
 from telebot import apihelper
 
+from telebot.types import ReplyKeyboardRemove
 from loguru import logger
 
 if config.PROXY_URL:
@@ -15,9 +16,21 @@ if config.PROXY_URL:
 
 bot = telebot.TeleBot(config.TOKEN, skip_pending=True)
 
+
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, '👋🏻 Привет! Это бот для технической поддержки пользователей.\nЕсли у тебя есть какой-либо вопрос или проблема - нажми на кнопку <b>Написать запрос</b> и наши сотрудники в скором времени тебе ответят!', parse_mode='html', reply_markup=markup.markup_main(message.from_user.id))
+    user_id = core.check_req_by_user_id(message.from_user.id)
+    if user_id is None:
+        bot.send_message(
+            message.chat.id,
+            '👋🏻 Привет! Это бот для технической поддержки пользователей.\nС вами свяжутся в ближайшее время',
+            reply_markup=ReplyKeyboardRemove()
+        )
+    if core.check_agent_status(message.from_user.id) == True:
+        bot.send_message(message.chat.id, '🔑 Вы авторизованы как Агент поддержки. Для входа в меню агента введите /agent или нажмите на соответствующую кнопку', parse_mode='html',
+                         reply_markup=markup.markup_main(message.from_user.id))
+    else:
+        get_new_request(message)
 
 
 @bot.message_handler(commands=['agent'])
@@ -25,11 +38,13 @@ def start(message):
 def agent(message):
     user_id = message.from_user.id
 
-    if core.check_agent_status(user_id) == True: 
-        bot.send_message(message.chat.id, '🔑 Вы авторизованы как Агент поддержки', parse_mode='html', reply_markup=markup.markup_agent())
-
+    if core.check_agent_status(user_id) == True:
+        bot.send_message(message.chat.id, '🔑 Вы авторизованы как Агент поддержки', parse_mode='html',
+                         reply_markup=markup.markup_agent())
     else:
-        take_password_message = bot.send_message(message.chat.id, '⚠️ Тебя нет в базе. Отправь одноразовый пароль доступа.', reply_markup=markup.markup_cancel())
+        take_password_message = bot.send_message(message.chat.id,
+                                                 '⚠️ Тебя нет в базе. Отправь одноразовый пароль доступа.',
+                                                 reply_markup=markup.markup_cancel())
 
         bot.clear_step_handler_by_chat_id(message.chat.id)
         bot.register_next_step_handler(take_password_message, get_password_message)
@@ -49,24 +64,30 @@ def admin(message):
 def send_text(message):
     user_id = message.from_user.id
 
-    if message.text == '✏️ Написать запрос':
-        take_new_request = bot.send_message(message.chat.id, 'Введите свой запрос и наши сотрудники скоро с вами свяжутся.', reply_markup=markup.markup_cancel())
+    bot.send_message(user_id, "С вами свяжутся в ближайшее время. Ожидайте.\nЕсли ваш запрос завершен, то введите команду /start для регистрации нового запроса.")
 
-        bot.clear_step_handler_by_chat_id(message.chat.id)
-        bot.register_next_step_handler(take_new_request, get_new_request)
-
-    elif message.text == '✉️ Мои запросы':
-        markup_and_value = markup.markup_reqs(user_id, 'my_reqs', '1')
-        markup_req = markup_and_value[0]
-        value = markup_and_value[1]
-
-        if value == 0:
-            bot.send_message(message.chat.id, 'У вас пока ещё нет запросов.', reply_markup=markup.markup_main(message.from_user.id))
-        else:
-            bot.send_message(message.chat.id, 'Ваши запросы:', reply_markup=markup_req)
-    
-    else:
-        bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html', reply_markup=markup.markup_main(message.from_user.id))
+    # if message.text == '✏️ Написать запрос':
+    #     take_new_request = bot.send_message(message.chat.id,
+    #                                         'Введите свой запрос и наши сотрудники скоро с вами свяжутся.',
+    #                                         reply_markup=markup.markup_cancel())
+    #
+    #     bot.clear_step_handler_by_chat_id(message.chat.id)
+    #     bot.register_next_step_handler(take_new_request, get_new_request)
+    #
+    # elif message.text == '✉️ Мои запросы':
+    #     markup_and_value = markup.markup_reqs(user_id, 'my_reqs', '1')
+    #     markup_req = markup_and_value[0]
+    #     value = markup_and_value[1]
+    #
+    #     if value == 0:
+    #         bot.send_message(message.chat.id, 'У вас пока ещё нет запросов.',
+    #                          reply_markup=markup.markup_main(message.from_user.id))
+    #     else:
+    #         bot.send_message(message.chat.id, 'Ваши запросы:', reply_markup=markup_req)
+    #
+    # else:
+    #     bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html',
+    #                      reply_markup=markup.markup_main(message.from_user.id))
 
 
 def get_password_message(message):
@@ -74,7 +95,8 @@ def get_password_message(message):
     user_id = message.from_user.id
 
     if password == None:
-        send_message = bot.send_message(message.chat.id, '⚠️ Вы отправляете не текст. Попробуйте еще раз.', reply_markup=markup.markup_cancel())
+        send_message = bot.send_message(message.chat.id, '⚠️ Вы отправляете не текст. Попробуйте еще раз.',
+                                        reply_markup=markup.markup_cancel())
 
         bot.clear_step_handler_by_chat_id(message.chat.id)
         bot.register_next_step_handler(send_message, get_password_message)
@@ -87,11 +109,14 @@ def get_password_message(message):
         core.delete_password(password)
         core.add_agent(user_id)
 
-        bot.send_message(message.chat.id, '🔑 Вы авторизованы как Агент поддержки', parse_mode='html', reply_markup=markup.markup_main(message.from_user.id))
-        bot.send_message(message.chat.id, 'Выберите раздел технической панели:', parse_mode='html', reply_markup=markup.markup_agent())
+        bot.send_message(message.chat.id, '🔑 Вы авторизованы как Агент поддержки', parse_mode='html',
+                         reply_markup=markup.markup_main(message.from_user.id))
+        bot.send_message(message.chat.id, 'Выберите раздел технической панели:', parse_mode='html',
+                         reply_markup=markup.markup_agent())
 
     else:
-        send_message = bot.send_message(message.chat.id, '⚠️ Неверный пароль. Попробуй ещё раз.', reply_markup=markup.markup_cancel())
+        send_message = bot.send_message(message.chat.id, '⚠️ Неверный пароль. Попробуй ещё раз.',
+                                        reply_markup=markup.markup_cancel())
 
         bot.clear_step_handler_by_chat_id(message.chat.id)
         bot.register_next_step_handler(send_message, get_password_message)
@@ -101,7 +126,8 @@ def get_agent_id_message(message):
     agent_id = message.text
 
     if agent_id == None:
-        take_agent_id_message = bot.send_message(message.chat.id, '⚠️ Вы отправляете не текст. Попробуйте еще раз.', reply_markup=markup.markup_cancel())
+        take_agent_id_message = bot.send_message(message.chat.id, '⚠️ Вы отправляете не текст. Попробуйте еще раз.',
+                                                 reply_markup=markup.markup_cancel())
 
         bot.clear_step_handler_by_chat_id(message.chat.id)
         bot.register_next_step_handler(take_agent_id_message, get_agent_id_message)
@@ -112,7 +138,8 @@ def get_agent_id_message(message):
 
     else:
         core.add_agent(agent_id)
-        bot.send_message(message.chat.id, '✅ Агент успешно добавлен.', reply_markup=markup.markup_main(message.from_user.id))
+        bot.send_message(message.chat.id, '✅ Агент успешно добавлен.',
+                         reply_markup=markup.markup_main(message.from_user.id))
         bot.send_message(message.chat.id, 'Выберите раздел админ панели:', reply_markup=markup.markup_admin())
 
 
@@ -143,14 +170,18 @@ def get_new_request(message):
 
             bot.send_message(
                 message.chat.id,
-                f'✅ Ваш запрос под ID {req_id} создан.'
-                f' Посмотреть текущие запросы можно нажав кнопку <b>Мои текущие запросы</b>',
-                parse_mode='html', reply_markup=markup.markup_main(message.from_user.id)
+                f'✅ Ваш запрос под ID {req_id} создан.',
+                parse_mode='html', reply_markup=ReplyKeyboardRemove()
             )
 
             agent_ids = core.get_agents(100)
+            if message.from_user.username is not None:
+                text_to_agent = f"Вам пришел новый запрос от пользователя @{message.from_user.username} с ID {req_id}"
+            else:
+                text_to_agent = f"Вам пришел новый запрос от пользователя {message.from_user.id} с ID {req_id}"
+
             for agent_id in agent_ids:
-                bot.send_message(agent_id[0], "Вам пришел новый запрос")
+                bot.send_message(agent_id[0], text_to_agent)
 
     # Если пользователь отправляет только текст
     else:
@@ -174,29 +205,35 @@ def get_new_request(message):
             req_id = core.new_req(user_id, request)
             bot.send_message(
                 message.chat.id,
-                f'✅ Ваш запрос под ID {req_id} создан. Посмотреть текущие запросы можно нажав кнопку <b>Мои текущие запросы</b>',
-                parse_mode='html', reply_markup=markup.markup_main(message.from_user.id)
+                f'✅ Ваш запрос под ID {req_id} создан.',
+                parse_mode='html', reply_markup=ReplyKeyboardRemove()
             )
             agent_ids = core.get_agents(100)
+            if message.from_user.username is not None:
+                text_to_agent = f"Вам пришел новый запрос от пользователя @{message.from_user.username}  с ID {req_id}"
+            else:
+                text_to_agent = f"Вам пришел новый запрос от пользователя {message.from_user.id}  с ID {req_id}"
+
             for agent_id in agent_ids:
-                bot.send_message(agent_id[0], "Вам пришел новый запрос")
+                bot.send_message(agent_id[0], text_to_agent)
 
 
 def get_additional_message(message, req_id, status, agent_id, is_user=False):
     additional_message = message.text
-    if additional_message == "✉️ Мои запросы" or additional_message == "✏️ Написать запрос":
-        bot.clear_step_handler_by_chat_id(message.chat.id)
-        bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html', reply_markup=markup.markup_main(message.from_user.id))
-        return
-    if additional_message == "Завершить запрос":
-        bot.clear_step_handler_by_chat_id(message.chat.id)
-        bot.send_message(chat_id=message.from_user.id,
-                         text="Для завершения запроса - нажмите кнопку <b>Подтвердить</b>", parse_mode='html',
-                         reply_markup=markup.markup_confirm_req(req_id))
-        return
+    # if additional_message == "✉️ Мои запросы" or additional_message == "✏️ Написать запрос":
+    #     bot.clear_step_handler_by_chat_id(message.chat.id)
+    #     bot.send_message(message.chat.id, 'Вы возвращены в главное меню.', parse_mode='html',
+    #                      reply_markup=markup.markup_main(message.from_user.id))
+    #     return
+    # if additional_message == "Завершить запрос":
+    #     bot.clear_step_handler_by_chat_id(message.chat.id)
+    #     bot.send_message(chat_id=message.from_user.id,
+    #                      text="Для завершения запроса - нажмите кнопку <b>Подтвердить</b>", parse_mode='html',
+    #                      reply_markup=markup.markup_confirm_req(req_id))
+    #     return
     check_file = core.get_file(message)
-    
-    #Если пользователь отправляет файл
+
+    # Если пользователь отправляет файл
     if check_file != None:
         file_id = check_file['file_id']
         file_name = check_file['file_name']
@@ -206,7 +243,9 @@ def get_additional_message(message, req_id, status, agent_id, is_user=False):
         core.add_file(req_id, file_id, file_name, type)
 
     if additional_message == None:
-        take_additional_message = bot.send_message(chat_id=message.chat.id, text='⚠️ Отправляемый вами тип данных не поддерживается в боте. Попробуйте еще раз отправить ваше сообщение, использовав один из доступных типов данных (текст, файлы, фото, видео, аудио, голосовые сообщения).', reply_markup=markup.markup_cancel())
+        take_additional_message = bot.send_message(chat_id=message.chat.id,
+                                                   text='⚠️ Отправляемый вами тип данных не поддерживается в боте. Попробуйте еще раз отправить ваше сообщение, использовав один из доступных типов данных (текст, файлы, фото, видео, аудио, голосовые сообщения).',
+                                                   reply_markup=markup.markup_cancel())
 
         bot.clear_step_handler_by_chat_id(message.chat.id)
         bot.register_next_step_handler(take_additional_message, get_additional_message, req_id, status, agent_id)
@@ -233,7 +272,8 @@ def get_additional_message(message, req_id, status, agent_id, is_user=False):
         msg = bot.send_message(message.from_user.id, text, reply_markup=markup.markup_main(message.from_user.id))
         # user_id = core.get_user_id_of_req(req_id)
         if is_user == True:
-            bot.send_message(agent_id, f'Получено новое сообщение на запрос с ID {req_id}', reply_markup=markup.markup_main(agent_id))
+            bot.send_message(agent_id, f'Получено новое сообщение на запрос с ID {req_id}',
+                             reply_markup=markup.markup_main(agent_id))
             bot.clear_step_handler_by_chat_id(msg.chat.id)
             bot.register_next_step_handler(msg, get_additional_message, req_id, status, agent_id, True)
             return
@@ -244,7 +284,9 @@ def get_additional_message(message, req_id, status, agent_id, is_user=False):
                 if additional_message == 'None':
                     additional_message = ''
                 if is_user == False:
-                    msg = bot.send_message(user_id, f'⚠️ Получен новый ответ на ваш запрос ID {req_id}!\n\n🧑‍💻 Ответ агента поддержки:\n{additional_message}', reply_markup=markup.markup_end_reqs())
+                    msg = bot.send_message(user_id,
+                                           f'⚠️ Получен новый ответ на ваш запрос ID {req_id}!\n\n🧑‍💻 Ответ агента поддержки:\n{additional_message}',
+                                           reply_markup=ReplyKeyboardRemove())
                 if type == 'photo':
                     bot.send_photo(user_id, photo=file_id, reply_markup=markup.markup_main(message.from_user.id))
                 elif type == 'document':
@@ -263,14 +305,15 @@ def get_additional_message(message, req_id, status, agent_id, is_user=False):
             except:
                 bot.clear_step_handler_by_chat_id(msg.chat.id)
                 bot.register_next_step_handler(msg, get_additional_message, req_id, status, agent_id, True)
-        
+
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     user_id = call.message.chat.id
 
     if call.message:
-        if ('my_reqs:' in call.data) or ('waiting_reqs:' in call.data) or ('answered_reqs:' in call.data) or ('confirm_reqs:' in call.data):
+        if ('my_reqs:' in call.data) or ('waiting_reqs:' in call.data) or ('answered_reqs:' in call.data) or (
+                'confirm_reqs:' in call.data):
             """
             Обработчик кнопок для:
 
@@ -288,18 +331,21 @@ def callback_inline(call):
             value = markup_and_value[1]
 
             if value == 0:
-                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Запросы не обнаружены.', reply_markup=markup.markup_main(user_id))
+                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Запросы не обнаружены.',
+                                 reply_markup=markup.markup_main(user_id))
                 bot.answer_callback_query(call.id)
                 return
 
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Нажмите на запрос, чтобы посмотреть историю переписки, либо добавить сообщение:', reply_markup=markup_req)
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='Нажмите на запрос, чтобы посмотреть историю переписки, либо добавить сообщение:',
+                                      reply_markup=markup_req)
             except:
                 bot.send_message(chat_id=call.message.chat.id, text='Ваши запросы:', reply_markup=markup_req)
 
             bot.answer_callback_query(call.id)
 
-        #Открыть запрос
+        # Открыть запрос
         elif 'open_req:' in call.data:
             parts = call.data.split(':')
             req_id = parts[1]
@@ -322,46 +368,58 @@ def callback_inline(call):
 
             bot.answer_callback_query(call.id)
 
-        #Добавить сообщение в запрос
+        # Добавить сообщение в запрос
         elif 'add_message:' in call.data:
             parts = call.data.split(':')
             req_id = parts[1]
             status_user = parts[2]
 
-            take_additional_message = bot.send_message(chat_id=call.message.chat.id, text='Отправьте ваше сообщение, использовав один из доступных типов данных (текст, файлы, фото, видео, аудио, голосовые сообщения)', reply_markup=markup.markup_cancel())
+            take_additional_message = bot.send_message(chat_id=call.message.chat.id,
+                                                       text='Отправьте ваше сообщение, использовав один из доступных типов данных (текст, файлы, фото, видео, аудио, голосовые сообщения)',
+                                                       reply_markup=markup.markup_cancel())
 
-            bot.register_next_step_handler(take_additional_message, get_additional_message, req_id, status_user, call.message.chat.id)
+            bot.register_next_step_handler(take_additional_message, get_additional_message, req_id, status_user,
+                                           call.message.chat.id)
 
             bot.answer_callback_query(call.id)
 
-        #Завершить запрос
+        # Завершить запрос
         elif 'confirm_req:' in call.data:
             parts = call.data.split(':')
             confirm_status = parts[1]
             req_id = parts[2]
 
             if core.get_req_status(req_id) == 'confirm':
-                bot.send_message(chat_id=call.message.chat.id, text="⚠️ Этот запрос уже завершен.", reply_markup=markup.markup_main(user_id))
+                bot.send_message(chat_id=call.message.chat.id, text="⚠️ Этот запрос уже завершен.",
+                                 reply_markup=markup.markup_main(user_id))
                 bot.answer_callback_query(call.id)
 
                 return
-            
-            #Запросить подтверждение завершения
+
+            # Запросить подтверждение завершения
             if confirm_status == 'wait':
-                bot.send_message(chat_id=call.message.chat.id, text="Для завершения запроса - нажмите кнопку <b>Подтвердить</b>", parse_mode='html', reply_markup=markup.markup_confirm_req(req_id))
-            
-            #Подтвердить завершение
+                bot.send_message(chat_id=call.message.chat.id,
+                                 text="Для завершения запроса - нажмите кнопку <b>Подтвердить</b>", parse_mode='html',
+                                 reply_markup=markup.markup_confirm_req(req_id))
+
+            # Подтвердить завершение
             elif confirm_status == 'true':
                 core.confirm_req(req_id)
-                
+                user_id = core.get_user_id_of_req(req_id)
                 try:
-                    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="✅ Запрос успешно завершён.", reply_markup=markup.markup_main(user_id))
+                    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                          text="✅ Запрос успешно завершён.", reply_markup=markup.markup_main(user_id))
+                    msg = bot.send_message(chat_id=user_id, text="✅ Вам запрос завершен. Если хотите зарегистрировать новый запрос введите команду /start.")
+                    bot.clear_step_handler_by_chat_id(msg.chat.id)
                 except:
-                    bot.send_message(chat_id=call.message.chat.id, text="✅ Запрос успешно завершён.", reply_markup=markup.markup_main(user_id))
-
+                    bot.send_message(chat_id=call.message.chat.id, text="✅ Запрос успешно завершён.",
+                                     reply_markup=markup.markup_main(user_id))
+                    msg = bot.send_message(chat_id=user_id,
+                                     text="✅ Вам запрос завершен. Если хотите зарегистрировать новый запрос введите команду /start.")
+                    bot.clear_step_handler_by_chat_id(msg.chat.id)
                 bot.answer_callback_query(call.id)
 
-        #Файлы запроса
+        # Файлы запроса
         elif 'req_files:' in call.data:
             parts = call.data.split(':')
             req_id = parts[1]
@@ -373,18 +431,21 @@ def callback_inline(call):
             value = markup_and_value[1]
 
             if value == 0:
-                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Файлы не обнаружены.', reply_markup=markup.markup_main(user_id))
+                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Файлы не обнаружены.',
+                                 reply_markup=markup.markup_main(user_id))
                 bot.answer_callback_query(call.id)
                 return
 
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Нажмите на файл, чтобы получить его.', reply_markup=markup_files)
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='Нажмите на файл, чтобы получить его.', reply_markup=markup_files)
             except:
-                bot.send_message(chat_id=call.message.chat.id, text='Нажмите на файл, чтобы получить его.', reply_markup=markup_files)
+                bot.send_message(chat_id=call.message.chat.id, text='Нажмите на файл, чтобы получить его.',
+                                 reply_markup=markup_files)
 
             bot.answer_callback_query(call.id)
 
-        #Отправить файл
+        # Отправить файл
         elif 'send_file:' in call.data:
             parts = call.data.split(':')
             id = parts[1]
@@ -402,33 +463,41 @@ def callback_inline(call):
                 bot.send_audio(call.message.chat.id, audio=file_id, reply_markup=markup.markup_main(user_id))
             elif type == 'voice':
                 bot.send_voice(call.message.chat.id, voice=file_id, reply_markup=markup.markup_main(user_id))
-            
+
             bot.answer_callback_query(call.id)
 
-        #Вернуться назад в панель агента
+        # Вернуться назад в панель агента
         elif call.data == 'back_agent':
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='🔑 Вы авторизованы как Агент поддержки', parse_mode='html', reply_markup=markup.markup_agent())
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='🔑 Вы авторизованы как Агент поддержки', parse_mode='html',
+                                      reply_markup=markup.markup_agent())
             except:
-                bot.send_message(call.message.chat.id, '🔑 Вы авторизованы как Агент поддержки', parse_mode='html', reply_markup=markup.markup_agent())
+                bot.send_message(call.message.chat.id, '🔑 Вы авторизованы как Агент поддержки', parse_mode='html',
+                                 reply_markup=markup.markup_agent())
 
             bot.answer_callback_query(call.id)
 
-        #Вернуться назад в панель админа
+        # Вернуться назад в панель админа
         elif call.data == 'back_admin':
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='🔑 Вы авторизованы как Админ', parse_mode='html', reply_markup=markup.markup_admin())
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='🔑 Вы авторизованы как Админ', parse_mode='html',
+                                      reply_markup=markup.markup_admin())
             except:
-                bot.send_message(call.message.chat.id, '🔑 Вы авторизованы как Админ', parse_mode='html', reply_markup=markup.markup_admin())
+                bot.send_message(call.message.chat.id, '🔑 Вы авторизованы как Админ', parse_mode='html',
+                                 reply_markup=markup.markup_admin())
 
             bot.answer_callback_query(call.id)
 
-        #Добавить агента
+        # Добавить агента
         elif call.data == 'add_agent':
-            take_agent_id_message = bot.send_message(chat_id=call.message.chat.id, text='Чтобы добавить агента поддержки - введите его ID Telegram.', reply_markup=markup.markup_cancel())
+            take_agent_id_message = bot.send_message(chat_id=call.message.chat.id,
+                                                     text='Чтобы добавить агента поддержки - введите его ID Telegram.',
+                                                     reply_markup=markup.markup_cancel())
             bot.register_next_step_handler(take_agent_id_message, get_agent_id_message)
 
-        #Все агенты
+        # Все агенты
         elif 'all_agents:' in call.data:
             number = call.data.split(':')[1]
             markup_and_value = markup.markup_agents(number)
@@ -436,30 +505,37 @@ def callback_inline(call):
             len_agents = markup_and_value[1]
 
             if len_agents == 0:
-                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Агенты не обнаружены.', reply_markup=markup.markup_main(user_id))
+                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Агенты не обнаружены.',
+                                 reply_markup=markup.markup_main(user_id))
                 bot.answer_callback_query(call.id)
                 return
 
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Нажмите на агента поддержки, чтобы удалить его', parse_mode='html', reply_markup=markup_agents)
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='Нажмите на агента поддержки, чтобы удалить его', parse_mode='html',
+                                      reply_markup=markup_agents)
             except:
-                bot.send_message(call.message.chat.id, 'Нажмите на агента поддержки, чтобы удалить его', parse_mode='html', reply_markup=markup_agents)
+                bot.send_message(call.message.chat.id, 'Нажмите на агента поддержки, чтобы удалить его',
+                                 parse_mode='html', reply_markup=markup_agents)
 
             bot.answer_callback_query(call.id)
 
-        #Удалить агента
+        # Удалить агента
         elif 'delete_agent:' in call.data:
             agent_id = call.data.split(':')[1]
             core.delete_agent(agent_id)
 
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Нажмите на агента поддержки, чтобы удалить его', parse_mode='html', reply_markup=markup.markup_agents('1')[0])
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='Нажмите на агента поддержки, чтобы удалить его', parse_mode='html',
+                                      reply_markup=markup.markup_agents('1')[0])
             except:
-                bot.send_message(call.message.chat.id, 'Нажмите на агента поддержки, чтобы удалить его', parse_mode='html', reply_markup=markup.markup_agents('1')[0])
+                bot.send_message(call.message.chat.id, 'Нажмите на агента поддержки, чтобы удалить его',
+                                 parse_mode='html', reply_markup=markup.markup_agents('1')[0])
 
             bot.answer_callback_query(call.id)
 
-        #Все пароли
+        # Все пароли
         elif 'all_passwords:' in call.data:
             number = call.data.split(':')[1]
             markup_and_value = markup.markup_passwords(number)
@@ -467,33 +543,40 @@ def callback_inline(call):
             len_passwords = markup_and_value[1]
 
             if len_passwords == 0:
-                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Пароли не обнаружены.', reply_markup=markup.markup_main(user_id))
+                bot.send_message(chat_id=call.message.chat.id, text='⚠️ Пароли не обнаружены.',
+                                 reply_markup=markup.markup_main(user_id))
                 bot.answer_callback_query(call.id)
                 return
 
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Нажмите на пароль, чтобы удалить его', parse_mode='html', reply_markup=markup_passwords)
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='Нажмите на пароль, чтобы удалить его', parse_mode='html',
+                                      reply_markup=markup_passwords)
             except:
-                bot.send_message(call.message.chat.id, 'Нажмите на пароль, чтобы удалить его', parse_mode='html', reply_markup=markup_passwords)
+                bot.send_message(call.message.chat.id, 'Нажмите на пароль, чтобы удалить его', parse_mode='html',
+                                 reply_markup=markup_passwords)
 
             bot.answer_callback_query(call.id)
 
-        #Удалить пароль
+        # Удалить пароль
         elif 'delete_password:' in call.data:
             password = call.data.split(':')[1]
             core.delete_password(password)
 
             try:
-                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Нажмите на пароль, чтобы удалить его', parse_mode='html', reply_markup=markup.markup_passwords('1')[0])
+                bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                      text='Нажмите на пароль, чтобы удалить его', parse_mode='html',
+                                      reply_markup=markup.markup_passwords('1')[0])
             except:
-                bot.send_message(call.message.chat.id, 'Нажмите на пароль, чтобы удалить его', parse_mode='html', reply_markup=markup.markup_passwords('1')[0])
+                bot.send_message(call.message.chat.id, 'Нажмите на пароль, чтобы удалить его', parse_mode='html',
+                                 reply_markup=markup.markup_passwords('1')[0])
 
             bot.answer_callback_query(call.id)
 
-        #Сгенерировать пароли
+        # Сгенерировать пароли
         elif call.data == 'generate_passwords':
-            #10 - количество паролей, 16 - длина пароля
-            passwords = core.generate_passwords(10, 16) 
+            # 10 - количество паролей, 16 - длина пароля
+            passwords = core.generate_passwords(10, 16)
             core.add_passwords(passwords)
 
             text_passwords = ''
@@ -501,27 +584,33 @@ def callback_inline(call):
             for password in passwords:
                 text_passwords += f'{i}. {password}\n'
                 i += 1
-            
-            bot.send_message(call.message.chat.id, f"✅ Сгенерировано {i-1} паролей:\n\n{text_passwords}", parse_mode='html', reply_markup=markup.markup_main(user_id))
-            bot.send_message(call.message.chat.id, 'Нажмите на пароль, чтобы удалить его', parse_mode='html', reply_markup=markup.markup_passwords('1')[0])
+
+            bot.send_message(call.message.chat.id, f"✅ Сгенерировано {i - 1} паролей:\n\n{text_passwords}",
+                             parse_mode='html', reply_markup=markup.markup_main(user_id))
+            bot.send_message(call.message.chat.id, 'Нажмите на пароль, чтобы удалить его', parse_mode='html',
+                             reply_markup=markup.markup_passwords('1')[0])
 
             bot.answer_callback_query(call.id)
 
-        #Остановить бота
+        # Остановить бота
         elif 'stop_bot:' in call.data:
             status = call.data.split(':')[1]
 
-            #Запросить подтверждение на отключение
+            # Запросить подтверждение на отключение
             if status == 'wait':
                 try:
-                    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы точно хотите отключить бота?", parse_mode='html', reply_markup=markup.markup_confirm_stop())
+                    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                          text=f"Вы точно хотите отключить бота?", parse_mode='html',
+                                          reply_markup=markup.markup_confirm_stop())
                 except:
-                    bot.send_message(call.message.chat.id, f"Вы точно хотите отключить бота?", parse_mode='html', reply_markup=markup.markup_confirm_stop())
+                    bot.send_message(call.message.chat.id, f"Вы точно хотите отключить бота?", parse_mode='html',
+                                     reply_markup=markup.markup_confirm_stop())
 
-            #Подтверждение получено
+            # Подтверждение получено
             elif status == 'confirm':
                 try:
-                    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='✅ Бот оключен.')
+                    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                          text='✅ Бот оключен.')
                 except:
                     bot.send_message(chat_id=call.message.chat.id, text='✅ Бот оключен.')
 
